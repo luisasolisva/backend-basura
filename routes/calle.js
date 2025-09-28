@@ -30,22 +30,32 @@ router.get('/:id', async (req, res) => {
     res.status(500).send('Error obteniendo calle');
   }
 });
-
 // Crear una calle
 router.post('/', async (req, res) => {
   try {
+    console.log('Body recibido en POST /api/calles:', req.body); // 👈 DEBUG
+
     const { nombre, shape } = req.body;
+
+    if (!nombre) {
+      return res.status(400).json({ error: 'El campo "nombre" es obligatorio' });
+    }
+
     const result = await pool.query(
-      `INSERT INTO calle (nombre, shape, created_at, updated_at)
-       VALUES ($1, $2, NOW(), NOW()) RETURNING *`,
+      `INSERT INTO calle (nombre, shape)
+       VALUES ($1, $2) RETURNING *`,
       [nombre, shape]
     );
+
+    console.log('Insert realizado:', result.rows[0]); // 👈 DEBUG
     res.status(201).json(result.rows[0]);
+
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error creando calle');
+    console.error('Error creando calle:', err);
+    res.status(500).json({ error: err.message });
   }
 });
+
 
 // Actualizar una calle
 router.put('/:id', async (req, res) => {
