@@ -11,10 +11,10 @@ const pool = require('../db');
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM posicion ORDER BY id');
-    res.json(result.rows);
+    res.json({ data: result.rows });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Error obteniendo posiciones');
+    res.status(500).json({ error: 'Error obteniendo posiciones' });
   }
 });
 
@@ -23,26 +23,39 @@ router.get('/recorrido/:recorrido_id', async (req, res) => {
   try {
     const { recorrido_id } = req.params;
     const result = await pool.query('SELECT * FROM posicion WHERE recorrido_id = $1', [recorrido_id]);
-    res.json(result.rows);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Recorrido no encontrado' });
+    }
+
+    res.json({ data: result.rows });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Error obteniendo posiciones del recorrido');
+    res.status(500).json({ error: 'Error obteniendo posiciones del recorrido' });
   }
 });
 
 // Crear una posición
 router.post('/', async (req, res) => {
   try {
-    const { recorrido_id, capturado_ts, geom } = req.body;
+    const { recorrido_id, lat, lon } = req.body;
+
+    if (!lat) return res.status(400).json({ message: 'El campo lat es obligatorio.' });
+    if (!lon) return res.status(400).json({ message: 'El campo lon es obligatorio.' });
+
+    // Guardamos lat/lon como texto en geom (puedes cambiarlo a tipo geometry si usas PostGIS)
+    const geom = `POINT(${lon} ${lat})`;
+
     const result = await pool.query(
       `INSERT INTO posicion (recorrido_id, capturado_ts, geom)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [recorrido_id, capturado_ts, geom]
+       VALUES ($1, NOW(), $2) RETURNING *`,
+      [recorrido_id, geom]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error creando posición');
+    console.error('Error creando posición:', err);
+    res.status(500).json({ error: 'Error creando posición' });
   }
 });
 
@@ -50,18 +63,29 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { recorrido_id, capturado_ts, geom } = req.body;
+    const { recorrido_id, lat, lon } = req.body;
+
+    if (!lat || !lon) {
+      return res.status(400).json({ message: 'Los campos lat y lon son obligatorios.' });
+    }
+
+    const geom = `POINT(${lon} ${lat})`;
+
     const result = await pool.query(
       `UPDATE posicion 
-       SET recorrido_id=$1, capturado_ts=$2, geom=$3
-       WHERE id=$4 RETURNING *`,
-      [recorrido_id, capturado_ts, geom, id]
+       SET recorrido_id=$1, capturado_ts=NOW(), geom=$2
+       WHERE id=$3 RETURNING *`,
+      [recorrido_id, geom, id]
     );
-    if (result.rows.length === 0) return res.status(404).send('Posición no encontrada');
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Posición no encontrada' });
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error actualizando posición');
+    console.error('Error actualizando posición:', err);
+    res.status(500).json({ error: 'Error actualizando posición' });
   }
 });
 
@@ -69,12 +93,17 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
     const result = await pool.query('DELETE FROM posicion WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) return res.status(404).send('Posición no encontrada');
-    res.json({ mensaje: 'Posición eliminada correctamente' });
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Posición no encontrada' });
+    }
+
+    res.json({ message: 'Posición eliminada correctamente' });
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error eliminando posición');
+    console.error('Error eliminando posición:', err);
+    res.status(500).json({ error: 'Error eliminando posición' });
   }
 });
 

@@ -1,20 +1,19 @@
-// backend-basura/routes/ruta.js
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
 // =========================
-// CRUD de Ruta
+// CRUD de Rutas
 // =========================
 
 // Obtener todas las rutas
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM ruta ORDER BY id');
-    res.json(result.rows);
+    res.json({ data: result.rows });
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error obteniendo rutas');
+    console.error('Error obteniendo rutas:', err);
+    res.status(500).json({ error: 'Error obteniendo rutas' });
   }
 });
 
@@ -23,27 +22,51 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query('SELECT * FROM ruta WHERE id = $1', [id]);
-    if (result.rows.length === 0) return res.status(404).send('Ruta no encontrada');
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ruta no encontrada' });
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error obteniendo ruta');
+    console.error('Error obteniendo ruta:', err);
+    res.status(500).json({ error: 'Error obteniendo ruta' });
   }
 });
 
 // Crear una ruta
 router.post('/', async (req, res) => {
   try {
-    const { perfil_id, nombre_ruta, color_hex, shape } = req.body;
+    const { perfil_id, nombre_ruta, color_hex, shape, calles } = req.body;
+
+    // Validaciones mínimas
+    if (!perfil_id) return res.status(422).json({ message: 'El campo perfil_id es obligatorio.' });
+    if (!nombre_ruta) return res.status(422).json({ message: 'El campo nombre_ruta es obligatorio.' });
+
+    // Insertar en ruta
     const result = await pool.query(
-      `INSERT INTO ruta (perfil_id, nombre_ruta, color_hex, shape)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [perfil_id, nombre_ruta, color_hex, shape]
+      `INSERT INTO ruta (perfil_id, nombre_ruta, color_hex, shape, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, NOW(), NOW())
+       RETURNING *`,
+      [perfil_id, nombre_ruta, color_hex || null, shape || null]
     );
-    res.status(201).json(result.rows[0]);
+
+    const nuevaRuta = result.rows[0];
+
+    // Si mandan calles asociadas (IDs de calle)
+    if (calles && Array.isArray(calles) && calles.length > 0) {
+      for (let calle_id of calles) {
+        await pool.query(
+          `INSERT INTO ruta_calle (ruta_id, calle_id) VALUES ($1, $2)`,
+          [nuevaRuta.id, calle_id]
+        );
+      }
+    }
+
+    res.status(201).json(nuevaRuta);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error creando ruta');
+    console.error('Error creando ruta:', err);
+    res.status(500).json({ error: 'Error creando ruta' });
   }
 });
 
@@ -52,17 +75,22 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { perfil_id, nombre_ruta, color_hex, shape } = req.body;
+
     const result = await pool.query(
-      `UPDATE ruta 
+      `UPDATE ruta
        SET perfil_id=$1, nombre_ruta=$2, color_hex=$3, shape=$4, updated_at=NOW()
        WHERE id=$5 RETURNING *`,
       [perfil_id, nombre_ruta, color_hex, shape, id]
     );
-    if (result.rows.length === 0) return res.status(404).send('Ruta no encontrada');
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ruta no encontrada' });
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error actualizando ruta');
+    console.error('Error actualizando ruta:', err);
+    res.status(500).json({ error: 'Error actualizando ruta' });
   }
 });
 
@@ -70,12 +98,17 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
     const result = await pool.query('DELETE FROM ruta WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) return res.status(404).send('Ruta no encontrada');
-    res.json({ mensaje: 'Ruta eliminada correctamente' });
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ruta no encontrada' });
+    }
+
+    res.json({ message: 'Ruta eliminada correctamente' });
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error eliminando ruta');
+    console.error('Error eliminando ruta:', err);
+    res.status(500).json({ error: 'Error eliminando ruta' });
   }
 });
 

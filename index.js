@@ -3,6 +3,8 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
 
 // Rutas
 app.get('/', (req, res) => res.send('Servidor backend funcionando 🚛'));
